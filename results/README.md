@@ -1,5 +1,7 @@
 # Pilot results
 
+This page describes the original four-job experiment. The separate [32-job scaling comparison](SCALING.md) covers concurrency caps of 4, 8, 16, and 32.
+
 On 12 October 2026, twelve planned trials produced eleven complete verifications. One trial stopped after a dispatch command returned an error even though GitHub had created the workflow. The harness cancelled that run; its usage remains in every applicable aggregate. All dispatched workflows were later confirmed terminal.
 
 Parallel CI shortened elapsed time in every pair where both conditions completed verification. Token outcomes varied. In the first complete no-fault polling pair, total tokens fell from 383,550 to 101,314. In the polling pair with a retry, they rose from 236,116 to 353,069. The tool-wait retry pair used 128,201 and 127,844 tokens despite elapsed time falling from 153.1 to 83.4 seconds. These are individual observations, not estimates of a typical saving.

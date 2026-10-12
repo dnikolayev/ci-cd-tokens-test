@@ -1,0 +1,109 @@
+{
+  "seed": 20261012,
+  "trials": [
+    {
+      "fault": "none",
+      "repeat": 1,
+      "monitor": "poll",
+      "parallel": 8,
+      "job_count": 32,
+      "planned_caps": [
+        4,
+        8,
+        16,
+        32
+      ]
+    },
+    {
+      "fault": "none",
+      "repeat": 1,
+      "monitor": "poll",
+      "parallel": 16,
+      "job_count": 32,
+      "planned_caps": [
+        4,
+        8,
+        16,
+        32
+      ]
+    },
+    {
+      "fault": "none",
+      "repeat": 1,
+      "monitor": "poll",
+      "parallel": 32,
+      "job_count": 32,
+      "planned_caps": [
+        4,
+        8,
+        16,
+        32
+      ]
+    },
+    {
+      "fault": "none",
+      "repeat": 1,
+      "monitor": "poll",
+      "parallel": 4,
+      "job_count": 32,
+      "planned_caps": [
+        4,
+        8,
+        16,
+        32
+      ]
+    },
+    {
+      "fault": "none",
+      "repeat": 1,
+      "monitor": "wait",
+      "parallel": 8,
+      "job_count": 32,
+      "planned_caps": [
+        4,
+        8,
+        16,
+        32
+      ]
+    },
+    {
+      "fault": "none",
+      "repeat": 1,
+      "monitor": "wait",
+      "parallel": 32,
+      "job_count": 32,
+      "planned_caps": [
+        4,
+        8,
+        16,
+        32
+      ]
+    },
+    {
+      "fault": "none",
+      "repeat": 1,
+      "monitor": "wait",
+      "parallel": 16,
+      "job_count": 32,
+      "planned_caps": [
+        4,
+        8,
+        16,
+        32
+      ]
+    },
+    {
+      "fault": "none",
+      "repeat": 1,
+      "monitor": "wait",
+      "parallel": 4,
+      "job_count": 32,
+      "planned_caps": [
+        4,
+        8,
+        16,
+        32
+      ]
+    }
+  ]
+}

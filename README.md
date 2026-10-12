@@ -10,6 +10,8 @@ Read the article: [AI Made Coding Faster. Our Delivery Pipeline Had to Catch Up.
 
 The [first pilot](results/README.md) contains all twelve planned trials, including one failed verification, plus separately labelled preflight attempts. Faster CI did not produce a consistent token reduction in this small sample.
 
+The [larger comparison](results/SCALING.md) keeps 32 jobs fixed and tests caps of 4, 8, 16, and 32. All eight trials verified successfully. Elapsed time generally fell as caps increased, while token counters showed why total and uncached input need separate interpretation.
+
 ## Reproduce
 
 You need Python 3.10 or newer, Git, authenticated [GitHub CLI](https://cli.github.com/), and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode). The harness uses Python's standard library. Agent runs consume your account's usage; Actions runs use your repository's runner allocation.
