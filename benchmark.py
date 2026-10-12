@@ -14,9 +14,14 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parent
-EXPECTED = {f"synthetic ({n})" for n in range(1, 5)}
 TOKEN_FIELDS = ("input_tokens", "cached_input_tokens", "cache_write_input_tokens",
                 "output_tokens", "reasoning_output_tokens")
+
+
+def expected_jobs(count=4):
+    if type(count) is not int or count not in (4, 32):
+        raise ValueError("Workload must contain 4 or 32 jobs")
+    return {f"synthetic ({n})" for n in range(1, count + 1)}
 
 
 def command(args, **kwargs):
@@ -70,17 +75,18 @@ def carried_forward(job, first):
                and all(job.get(field) == old.get(field) for field in fields) for old in first)
 
 
-def accepted(attempts, fault):
+def accepted(attempts, fault, job_count=4):
     if not attempts or len(attempts) != (2 if fault == "once" else 1):
         return False
-    expected = {name: "success" for name in EXPECTED}
+    names = expected_jobs(job_count)
+    expected = {name: "success" for name in names}
     if fault == "once":
         expected["synthetic (1)"] = "failure"
     if not matches_jobs(attempts[0], expected, 1):
         return False
     if fault == "once":
         retry = attempts[1]
-        if len(retry) != len({j["name"] for j in retry}) or any(j["name"] not in EXPECTED for j in retry):
+        if len(retry) != len({j["name"] for j in retry}) or any(j["name"] not in names for j in retry):
             return False
         if not matches_jobs(retry, {j["name"]: "success" for j in retry}, 2):
             return False
@@ -98,7 +104,7 @@ def usage(events):
     for field, value in result.items():
         if value is not None and (type(value) is not int or value < 0):
             raise ValueError(f"Invalid usage field: {field}")
-    if result["input_tokens"] is None or result["output_tokens"] is None:
+    if not result["input_tokens"] or result["output_tokens"] is None:
         raise ValueError("Missing required token counters")
     cached = result["cached_input_tokens"]
     if cached is not None and cached > result["input_tokens"]:
@@ -110,6 +116,7 @@ def usage(events):
 
 def observe(path):
     state = json.loads(path.read_text())
+    names = expected_jobs(state.get("job_count", 4))
     state["observer_invocations"] += 1
     if state.get("terminal"):
         print(json.dumps({"terminal": True, "accepted": state["accepted"]}))
@@ -121,6 +128,7 @@ def observe(path):
         save(path, state)  # Never silently dispatch twice after an uncertain API outcome.
         gh("workflow", "run", "synthetic.yml", "--repo", state["repo"], "--ref", state["ref"],
            "-f", f"trial={state['trial']}", "-f", f"parallel={state['parallel']}",
+           "-f", f"jobs={state.get('job_count', 4)}",
            "-f", f"hold={state['hold_seconds']}", "-f", f"fault={state['fault']}")
     deadline = epoch(state["dispatch_started"]) + state["timeout_seconds"]
     while time.time() < deadline:
@@ -151,7 +159,7 @@ def observe(path):
                     state["attempts"].append(cleaned)
                 expected_failure = (state["fault"] == "once" and attempt == 1
                     and matches_jobs(state["attempts"][0],
-                        {name: "failure" if name == "synthetic (1)" else "success" for name in EXPECTED}, 1))
+                        {name: "failure" if name == "synthetic (1)" else "success" for name in names}, 1))
                 if expected_failure and not state.get("retry_requested"):
                     state["retry_requested"] = now()
                     save(path, state)
@@ -159,7 +167,7 @@ def observe(path):
                 elif expected_failure and state.get("retry_requested"):
                     pass  # The rerun request can take a moment to become visible.
                 else:
-                    state["accepted"] = accepted(state["attempts"], state["fault"])
+                    state["accepted"] = accepted(state["attempts"], state["fault"], state.get("job_count", 4))
                     state["terminal"] = True
                     state["verified_at"] = now()
             state["last_status"] = run["status"]
@@ -254,6 +262,7 @@ def run_trial(args, spec, order):
     # Explicit public whitelist: no transcript, local paths, account state or environment.
     result = {key: state.get(key) for key in
               ("trial", "repo", "ref", "source_sha", "order", "repeat", "parallel", "monitor", "fault",
+               "job_count", "planned_caps",
                "hold_seconds", "poll_seconds", "timeout_seconds", "observer_invocations", "api_polls",
                "run_id", "dispatch_started", "workflow_created_at", "workflow_updated_at", "verified_at", "attempts")}
     result.update(model=args.model, reasoning=args.reasoning,
@@ -302,15 +311,20 @@ def pilot(args):
         raise ValueError("Use 0 to 20 repetitions per scenario and at least one overall")
     if not 60 <= args.timeout <= 1800:
         raise ValueError("Timeout must be between 60 and 1800 seconds")
+    expected_jobs(args.jobs)
+    if (not args.caps or len(set(args.caps)) != len(args.caps)
+            or any(cap not in (1, 4, 8, 16, 32) or cap > args.jobs for cap in args.caps)):
+        raise ValueError("Caps must be distinct supported values no larger than the fixed workload")
     rng = random.Random(args.seed)
     groups = [(fault, repeat, monitor) for fault, count in (("none", args.repeats), ("once", args.fault_repeats))
               for repeat in range(1, count + 1) for monitor in ("poll", "wait")]
     rng.shuffle(groups)
     specs = []
     for fault, repeat, monitor in groups:
-        caps = [1, 4]
+        caps = list(args.caps)
         rng.shuffle(caps)
-        specs.extend(dict(fault=fault, repeat=repeat, monitor=monitor, parallel=cap) for cap in caps)
+        specs.extend(dict(fault=fault, repeat=repeat, monitor=monitor, parallel=cap,
+                          job_count=args.jobs, planned_caps=sorted(args.caps)) for cap in caps)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if args.output.exists():
         raise ValueError("Refusing to overwrite an existing result file")
@@ -346,6 +360,9 @@ def main():
                      help="Load existing user configuration when required by your host; record this choice")
     run.add_argument("--repeats", type=int, default=2)
     run.add_argument("--fault-repeats", type=int, default=1)
+    run.add_argument("--jobs", type=int, choices=(4, 32), default=4,
+                     help="Keep this workload size fixed across all caps")
+    run.add_argument("--caps", type=int, nargs="+", choices=(1, 4, 8, 16, 32), default=[1, 4])
     run.add_argument("--hold", type=int, default=15)
     run.add_argument("--poll", type=int, default=10)
     run.add_argument("--timeout", type=int, default=600)

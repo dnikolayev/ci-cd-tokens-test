@@ -4,17 +4,17 @@
 
 The experiment asks whether CI admission and monitoring style affect the agent effort needed to observe an already-correct change through complete verification. It deliberately omits code generation and real debugging.
 
-Each workflow has four identical jobs. Each runs the repository's tests and occupies a runner for the same fixed hold period. `strategy.max-parallel` is either 1 or 4. `fail-fast: false` ensures that an injected failure does not cancel other checks. [GitHub defines this setting as a limit on simultaneous matrix jobs](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/run-job-variations).
+The default workflow has four identical jobs and compares concurrency caps of 1 and 4. The larger experiment keeps 32 jobs fixed and compares caps of 4, 8, 16, and 32. Each job runs the repository's tests and occupies a runner for the same fixed hold period. `strategy.max-parallel` sets the cap. `fail-fast: false` ensures that an injected failure does not cancel other checks. [GitHub defines this setting as a limit on simultaneous matrix jobs](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/run-job-variations).
 
 In `poll` mode the observer returns a small status message after each polling interval, allowing the agent to request another observation. In `wait` mode it loops inside one command until completion. A shell tool may yield while the command is running, requiring the agent to wait on its session. This is a tool-wait control, not a guarantee of zero model activity.
 
-The `none` scenario requires all four jobs to succeed on the first attempt. The `once` scenario requires exactly the first shard to fail after its ordinary hold on attempt 1, with all others successful, followed by one successful retry of that shard. The helper requests `gh run rerun --failed` only for that exact expected failure pattern. Missing, skipped, cancelled, or unexpectedly failing checks do not establish success.
+The `none` scenario requires every job in the fixed workload to succeed on the first attempt. The `once` scenario requires exactly the first shard to fail after its ordinary hold on attempt 1, with all others successful, followed by one successful retry of that shard. The helper requests `gh run rerun --failed` only for that exact expected failure pattern. Missing, skipped, cancelled, or unexpectedly failing checks do not establish success.
 
 GitHub can include carried-forward successful jobs in a partial rerun's response, with new IDs but unchanged execution timestamps and outcomes. Those entries are checked against the successful first attempt, marked in the receipt, and excluded from repeated-work and overlap totals. Only the failed shard must execute again.
 
 ## Trial protocol
 
-The seed fixes paired trial order before the first run. Each pair shares fault mode, monitoring style, repetition, model, settings, source, hold duration, and polling interval. Concurrency order is randomized within the pair. Pairs run sequentially to avoid intentional interference between trials.
+The seed fixes trial order before the first run. Compared trials share fault mode, monitoring style, repetition, model, settings, source, job count, hold duration, and polling interval. Concurrency order is randomized within each repetition and monitoring style. Trials run sequentially to avoid intentional interference. The smallest intended cap is the comparison baseline. The recorded plan keeps missing conditions visible; reports reject mixed workloads or plans. Legacy records without these fields describe the original four-job, cap-1/cap-4 experiment.
 
 Each trial starts one fresh `codex exec` session. By default the CLI ignores user configuration and execution rules, uses a workspace-write sandbox with network access for GitHub, and disables project document injection. `--use-user-config` loads existing configuration when host-specific settings are necessary; the result records that choice without publishing private configuration. Authentication stays in the existing CLI setup. CLI defaults, global tool availability, model service behavior, and prompt caching can still differ across installations; record the CLI version and compare conditions within the same setup.
 
@@ -37,6 +37,8 @@ Job timestamps permit calculation of the total recorded job seconds, the time fr
 Publish individual trials and paired differences, with all attempts retained. Summaries should separate the two fault scenarios and the two monitoring styles. Report verification successes out of all attempted trials. For usage per successful verification, include usage of valid unsuccessful trials in the numerator. If any trial lacks usage counters, that aggregate is incomplete and must be labelled accordingly.
 
 Two repetitions per stable cell and one per fault cell are a pilot, not a reliable population estimate. Hosted runner scheduling and shared prompt caches can vary. No cache is forcibly warmed or cleared; cached and uncached counts must be visible. The deliberately repeated polling is a treatment, not a claim that every agent behaves that way.
+
+The larger comparison uses one repetition per cap and monitoring style by default in the documented command. Keep its results separate from the four-job pilot. Report actual job overlap alongside the requested cap; account limits and runner availability can prevent the cap from being reached. A higher requested cap with unchanged overlap does not demonstrate the effect of additional simultaneous jobs.
 
 Faster CI with similar usage in the waiting condition is a useful outcome. It would distinguish the cost of elapsed time from work performed during that time. A large polling difference would demonstrate a mechanism in this setup, not establish that adding runners caused a historical change in anyone's subscription allowance.
 
