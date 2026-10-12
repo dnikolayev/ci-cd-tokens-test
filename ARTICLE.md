@@ -64,9 +64,20 @@ The pilot completed 11 of 12 planned verifications. One dispatch error interrupt
 
 Both settings run the same four jobs. Time covers the whole agent session, including startup and the final response. Every row got faster. Token usage fell sharply in one, rose in another, and barely changed in the waiting control. These are session input plus output counts, including cached input. Uncached input moved differently again. The [full results](results/README.md) show every trial and those separate counters.
 
-This supports investigating CI as part of agent efficiency. It does not establish a dependable token reduction from adding capacity, or explain the change we thought we saw in our own allowance.
+We also wanted to know what happened at 8, 16, and 32 slots. Four jobs cannot answer that question, so we ran a separate experiment with 32 jobs in every condition. Each cap had one polling trial and one tool-wait trial. All eight completed verification, and each reached its requested job overlap.
 
-This is a small pilot. It is enough to see how the setup behaves and where measurement gets awkward. Failed attempts belong in the results. Reporting usage per completed verification must include the cost of valid attempts that did not finish successfully. A larger claim about typical savings would need more repetitions and more realistic tasks, including actual debugging and review corrections.
+| Cap | Polling time | Tool-wait time | Polling tokens | Tool-wait tokens |
+| --- | --- | --- | --- | --- |
+| 4 | 194.9 s | 194.8 s | 448,226 | 179,956 |
+| 8 | 114.8 s | 123.4 s | 378,660 | 102,658 |
+| 16 | 74.7 s | 70.1 s | 127,924 | 123,233 |
+| 32 | 81.7 s | 56.7 s | 226,808 | 76,358 |
+
+Moving from 4 to 16 slots helped both approaches. Going from 16 to 32 helped the tool-wait trial, while the polling trial got slightly slower. One run per condition cannot tell us which setting is best.
+
+There was another wrinkle. From cap 4 to cap 32, total tokens fell in both approaches, but uncached input increased in both. The [larger experiment's records](results/SCALING.md) include those counters and the job timings. A reduction in total tokens still does not tell us how much weekly allowance was saved.
+
+These experiments support investigating CI as part of agent efficiency. They do not establish a dependable token reduction from adding capacity, or explain the change we thought we saw in our own allowance. A larger claim about typical savings would need more repetitions and more realistic tasks, including actual debugging and review corrections. Failed attempts belong in those results too. Usage per completed verification must include the cost of attempts that did not finish successfully.
 
 For engineers considering similar improvements, I would start by following a few changes all the way through delivery. Record when implementation was ready, when required jobs could start, when feedback arrived, and when the deployed behavior was verified. Count interventions and retries alongside elapsed time. That gives you a better chance of fixing the part that is actually slowing the work.
 
