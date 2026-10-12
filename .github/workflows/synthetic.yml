@@ -9,8 +9,13 @@ on:
       parallel:
         description: Maximum simultaneous jobs
         type: choice
-        options: ['1', '4']
+        options: ['1', '4', '8', '16', '32']
         default: '1'
+      jobs:
+        description: Fixed number of jobs in every condition
+        type: choice
+        options: ['4', '32']
+        default: '4'
       hold:
         description: Seconds of synthetic occupancy per job (5 to 60)
         default: '15'
@@ -30,7 +35,7 @@ jobs:
       fail-fast: false
       max-parallel: ${{ fromJSON(inputs.parallel) }}
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: ${{ fromJSON(inputs.jobs == '4' && '[1,2,3,4]' || inputs.jobs == '32' && '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]' || '[]') }}
     steps:
       - uses: actions/checkout@v4
       - name: Run unchanged checks

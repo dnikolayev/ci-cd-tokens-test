@@ -3,6 +3,7 @@ import io
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -68,7 +69,8 @@ class UsageTests(unittest.TestCase):
             }}])
 
     def test_required_counters_cannot_be_missing(self):
-        for counters in ({}, {"input_tokens": 1}, {"output_tokens": 1}):
+        for counters in ({}, {"input_tokens": 1}, {"output_tokens": 1},
+                         {"input_tokens": 0, "output_tokens": 0}):
             with self.subTest(counters=counters), self.assertRaises(ValueError):
                 benchmark.usage([{"type": "turn.completed", "usage": counters}])
 
@@ -91,6 +93,16 @@ class AcceptanceTests(unittest.TestCase):
         for invalid in (jobs[:-1], jobs + [job(5)], jobs[:-1] + [job(1)]):
             with self.subTest(jobs=invalid):
                 self.assertFalse(benchmark.accepted([invalid], "none"))
+
+    def test_larger_workload_requires_every_job_and_preserves_single_retry(self):
+        jobs = [job(n) for n in range(1, 33)]
+        self.assertTrue(benchmark.accepted([jobs], "none", 32))
+        for invalid in (jobs[:4], jobs[:-1], jobs + [job(33)], jobs[:-1] + [job(1)]):
+            with self.subTest(jobs=len(invalid)):
+                self.assertFalse(benchmark.accepted([invalid], "none", 32))
+        first = [job(1, conclusion="failure"), *jobs[1:]]
+        self.assertTrue(benchmark.accepted([first, [job(1, attempt=2)]], "once", 32))
+        self.assertFalse(benchmark.accepted([first[:-1], [job(1, attempt=2)]], "once", 32))
 
     def test_skipped_cancelled_failed_or_unfinished_jobs_are_rejected(self):
         for conclusion in ("skipped", "cancelled", "failure", None):
@@ -198,6 +210,22 @@ class ObserverTests(unittest.TestCase):
         gh.assert_not_called()
         api.assert_not_called()
 
+    def test_dispatch_and_acceptance_use_fixed_larger_workload(self):
+        self.state.pop("dispatch_started")
+        self.state.pop("run_id")
+        self.state.update(job_count=32, parallel=16, fault="none")
+        run = {"head_sha": self.state["source_sha"], "run_attempt": 1, "status": "completed",
+               "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:20Z"}
+        responses = [{"workflow_runs": [{"id": 123, "display_title": "trial-example-trial"}]},
+                     run, {"jobs": [job(n) for n in range(1, 33)]}]
+        benchmark.save(self.path, self.state)
+        with patch.object(benchmark, "api", side_effect=responses), patch.object(benchmark, "gh") as gh, \
+             patch.object(benchmark.time, "sleep"), patch.object(benchmark.time, "time", return_value=0):
+            self.assertTrue(self.observe()["accepted"])
+        self.assertEqual(gh.call_count, 1)
+        self.assertIn("jobs=32", gh.call_args.args)
+        self.assertIn("parallel=16", gh.call_args.args)
+
     def test_retry_request_is_not_repeated_before_attempt_becomes_visible(self):
         first = [job(1, conclusion="failure")] + [job(n) for n in range(2, 5)]
         run = {"head_sha": self.state["source_sha"], "run_attempt": 1, "status": "completed",
@@ -235,6 +263,37 @@ class ObserverTests(unittest.TestCase):
         self.assertTrue(result["terminal"])
         self.assertFalse(result["accepted"])
         gh.assert_not_called()
+
+
+class PlanTests(unittest.TestCase):
+    def args(self, directory, **updates):
+        values = dict(repo="example/ci-demo", hold=15, poll=10, timeout=600, jobs=32,
+                      caps=[4, 8, 16, 32], repeats=1, fault_repeats=0, seed=42,
+                      output=Path(directory) / "scaling.jsonl")
+        values.update(updates)
+        return SimpleNamespace(**values)
+
+    def test_scaling_plan_keeps_workload_fixed_across_every_condition(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = self.args(directory)
+            with patch.object(benchmark, "run_trial", return_value={
+                    "success": True, "elapsed_seconds": 1, "usage": None}) as trial, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                benchmark.pilot(args)
+            specs = json.loads(args.output.with_suffix(".plan.json").read_text())["trials"]
+            self.assertEqual(trial.call_count, 8)
+            self.assertEqual({(s["monitor"], s["parallel"]) for s in specs},
+                             {(monitor, cap) for monitor in ("poll", "wait") for cap in (4, 8, 16, 32)})
+            self.assertTrue(all(s["job_count"] == 32 and s["planned_caps"] == [4, 8, 16, 32]
+                                and s["fault"] == "none" for s in specs))
+
+    def test_invalid_caps_are_rejected_before_any_trial(self):
+        for changes in (dict(caps=[4, 4]), dict(caps=[]), dict(caps=[2]),
+                        dict(jobs=4, caps=[4, 8]), dict(jobs=8)):
+            with self.subTest(changes=changes), tempfile.TemporaryDirectory() as directory, \
+                    patch.object(benchmark, "run_trial") as trial, self.assertRaises(ValueError):
+                benchmark.pilot(self.args(directory, **changes))
+            trial.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,77 @@
+{
+  "seed": 20261012,
+  "trials": [
+    {
+      "fault": "none",
+      "repeat": 1,
+      "monitor": "wait",
+      "parallel": 4
+    },
+    {
+      "fault": "none",
+      "repeat": 1,
+      "monitor": "wait",
+      "parallel": 1
+    },
+    {
+      "fault": "none",
+      "repeat": 2,
+      "monitor": "poll",
+      "parallel": 4
+    },
+    {
+      "fault": "none",
+      "repeat": 2,
+      "monitor": "poll",
+      "parallel": 1
+    },
+    {
+      "fault": "once",
+      "repeat": 1,
+      "monitor": "wait",
+      "parallel": 1
+    },
+    {
+      "fault": "once",
+      "repeat": 1,
+      "monitor": "wait",
+      "parallel": 4
+    },
+    {
+      "fault": "once",
+      "repeat": 1,
+      "monitor": "poll",
+      "parallel": 4
+    },
+    {
+      "fault": "once",
+      "repeat": 1,
+      "monitor": "poll",
+      "parallel": 1
+    },
+    {
+      "fault": "none",
+      "repeat": 1,
+      "monitor": "poll",
+      "parallel": 4
+    },
+    {
+      "fault": "none",
+      "repeat": 1,
+      "monitor": "poll",
+      "parallel": 1
+    },
+    {
+      "fault": "none",
+      "repeat": 2,
+      "monitor": "wait",
+      "parallel": 4
+    },
+    {
+      "fault": "none",
+      "repeat": 2,
+      "monitor": "wait",
+      "parallel": 1
+    }
+  ]
+}
