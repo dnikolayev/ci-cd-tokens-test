@@ -10,11 +10,13 @@ In `poll` mode the observer returns a small status message after each polling in
 
 The `none` scenario requires all four jobs to succeed on the first attempt. The `once` scenario requires exactly the first shard to fail after its ordinary hold on attempt 1, with all others successful, followed by one successful retry of that shard. The helper requests `gh run rerun --failed` only for that exact expected failure pattern. Missing, skipped, cancelled, or unexpectedly failing checks do not establish success.
 
+GitHub can include carried-forward successful jobs in a partial rerun's response, with new IDs but unchanged execution timestamps and outcomes. Those entries are checked against the successful first attempt, marked in the receipt, and excluded from repeated-work and overlap totals. Only the failed shard must execute again.
+
 ## Trial protocol
 
 The seed fixes paired trial order before the first run. Each pair shares fault mode, monitoring style, repetition, model, settings, source, hold duration, and polling interval. Concurrency order is randomized within the pair. Pairs run sequentially to avoid intentional interference between trials.
 
-Each trial starts one fresh `codex exec` session. The CLI ignores user configuration and execution rules, uses a workspace-write sandbox with network access for GitHub, and disables project document injection. Authentication stays in the existing CLI setup. CLI defaults, global tool availability, model service behavior, and prompt caching can still differ across installations; record the CLI version and compare conditions within the same setup.
+Each trial starts one fresh `codex exec` session. By default the CLI ignores user configuration and execution rules, uses a workspace-write sandbox with network access for GitHub, and disables project document injection. `--use-user-config` loads existing configuration when host-specific settings are necessary; the result records that choice without publishing private configuration. Authentication stays in the existing CLI setup. CLI defaults, global tool availability, model service behavior, and prompt caching can still differ across installations; record the CLI version and compare conditions within the same setup.
 
 The prompt is built in `run_trial` in [benchmark.py](benchmark.py). It tells the agent to use only the observer command, wait on a running command, and stop after verified completion or an error. The observer dispatches on its first invocation, so agent startup does not consume the CI exposure period. A unique trial name identifies the dispatch; local HEAD must match the remote branch and the workflow must report that SHA.
 

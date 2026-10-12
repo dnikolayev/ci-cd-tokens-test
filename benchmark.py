@@ -63,6 +63,13 @@ def matches_jobs(jobs, expected, attempt):
                     and j.get("hold_conclusion") == expected[j["name"]] for j in jobs))
 
 
+def carried_forward(job, first):
+    fields = ("name", "status", "conclusion", "checks_conclusion", "hold_conclusion",
+              "started_at", "completed_at")
+    return any(old.get("conclusion") == "success" and old.get("started_at") and old.get("completed_at")
+               and all(job.get(field) == old.get(field) for field in fields) for old in first)
+
+
 def accepted(attempts, fault):
     if not attempts or len(attempts) != (2 if fault == "once" else 1):
         return False
@@ -72,7 +79,13 @@ def accepted(attempts, fault):
     if not matches_jobs(attempts[0], expected, 1):
         return False
     if fault == "once":
-        return matches_jobs(attempts[1], {"synthetic (1)": "success"}, 2)
+        retry = attempts[1]
+        if len(retry) != len({j["name"] for j in retry}) or any(j["name"] not in EXPECTED for j in retry):
+            return False
+        if not matches_jobs(retry, {j["name"]: "success" for j in retry}, 2):
+            return False
+        executed = [j for j in retry if not carried_forward(j, attempts[0])]
+        return matches_jobs(executed, {"synthetic (1)": "success"}, 2)
     return True
 
 
@@ -130,7 +143,12 @@ def observe(path):
             if run["status"] == "completed":
                 jobs = api(f"{base}/runs/{state['run_id']}/attempts/{attempt}/jobs?per_page=100")["jobs"]
                 if len(state["attempts"]) < attempt:
-                    state["attempts"].append([clean_job(j, attempt) for j in jobs])
+                    cleaned = [clean_job(j, attempt) for j in jobs]
+                    if attempt > 1 and state["attempts"]:
+                        for job in cleaned:
+                            if carried_forward(job, state["attempts"][0]):
+                                job["carried_forward_from_attempt"] = 1
+                    state["attempts"].append(cleaned)
                 expected_failure = (state["fault"] == "once" and attempt == 1
                     and matches_jobs(state["attempts"][0],
                         {name: "failure" if name == "synthetic (1)" else "success" for name in EXPECTED}, 1))
@@ -157,7 +175,7 @@ def observe(path):
 
 
 def job_metrics(attempts):
-    jobs = [j for attempt in attempts for j in attempt]
+    jobs = [j for attempt in attempts for j in attempt if not j.get("carried_forward_from_attempt")]
     intervals = [(epoch(j["started_at"]), epoch(j["completed_at"])) for j in jobs
                  if j.get("started_at") and j.get("completed_at")]
     if any(end < start for start, end in intervals):
@@ -195,10 +213,13 @@ def run_trial(args, spec, order):
               "delegate, or manually retry a workflow. When terminal=true, reply exactly VERIFIED if accepted=true, "
               "otherwise FAILED. If the command errors, reply FAILED. No commentary or extra investigation is needed.")
     save(directory / "prompt.json", {"prompt": prompt})
-    cli = ["codex", "exec", "--ignore-user-config", "--ignore-rules", "--ephemeral",
+    cli = ["codex", "exec", "--ignore-rules", "--ephemeral",
            "--json", "--color", "never", "--sandbox", "workspace-write",
+           "--disable", "hooks", "-c", "notify=[]",
            "-c", "sandbox_workspace_write.network_access=true", "-c", "project_doc_max_bytes=0",
            "-m", args.model, "-c", f'model_reasoning_effort="{args.reasoning}"', prompt]
+    if not args.use_user_config:
+        cli.insert(2, "--ignore-user-config")
     start = time.monotonic()
     started_at = now()
     timed_out = False
@@ -236,6 +257,7 @@ def run_trial(args, spec, order):
                "hold_seconds", "poll_seconds", "timeout_seconds", "observer_invocations", "api_polls",
                "run_id", "dispatch_started", "workflow_created_at", "workflow_updated_at", "verified_at", "attempts")}
     result.update(model=args.model, reasoning=args.reasoning,
+                  use_user_config=args.use_user_config,
                   cli_version=command(["codex", "--version"]).strip(), started_at=started_at,
                   elapsed_seconds=round(elapsed, 3), usage=counters,
                   measurement_error=measurement_error, malformed_events=malformed_events,
@@ -320,6 +342,8 @@ def main():
     run.add_argument("--ref", default="main")
     run.add_argument("--model", required=True)
     run.add_argument("--reasoning", required=True)
+    run.add_argument("--use-user-config", action="store_true",
+                     help="Load existing user configuration when required by your host; record this choice")
     run.add_argument("--repeats", type=int, default=2)
     run.add_argument("--fault-repeats", type=int, default=1)
     run.add_argument("--hold", type=int, default=15)

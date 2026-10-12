@@ -27,6 +27,8 @@ Results go to `.runs/pilot.jsonl`; the planned order goes to `.runs/pilot.plan.j
 
 Use `--repeats 1 --fault-repeats 0` for a four-session check, or increase repetitions for a more useful estimate. Use a new `--output .runs/another-pilot.jsonl` path for another batch. The harness refuses to overwrite an existing result file.
 
+If your host requires a setting from existing user configuration, add `--use-user-config`. For example, Codex's permission to use an already trusted symlinked home must come from user configuration, not a command-line override. This option loads the whole user configuration, so use the same setup for every condition. Model, reasoning, project-document, and sandbox overrides still apply; hooks and notification commands are disabled for each trial. Configuration contents stay private; the result records whether they were loaded.
+
 ## What to compare
 
 - Elapsed agent time and CI job timing, including realized job overlap.

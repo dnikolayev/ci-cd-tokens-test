@@ -109,7 +109,7 @@ class AcceptanceTests(unittest.TestCase):
     def test_wrong_failure_or_retry_is_rejected(self):
         first = [job(1, conclusion="failure")] + [job(n) for n in range(2, 5)]
         for retry in ([], [job(2, attempt=2)], [job(1, attempt=2, conclusion="failure")],
-                      [job(1, attempt=2), job(2, attempt=2)]):
+                      [job(1, attempt=2), job(2, attempt=2, start=20, end=30)]):
             with self.subTest(retry=retry):
                 self.assertFalse(benchmark.accepted([first, retry], "once"))
         wrong_failure = [job(n, conclusion="failure" if n == 2 else "success") for n in range(1, 5)]
@@ -127,6 +127,19 @@ class AcceptanceTests(unittest.TestCase):
             first[0]["checks_conclusion"] = conclusion
             with self.subTest(conclusion=conclusion):
                 self.assertFalse(benchmark.accepted([first, [job(1, attempt=2)]], "once"))
+
+    def test_carried_forward_successes_are_accepted_without_extra_execution(self):
+        first = [job(1, conclusion="failure")] + [job(n) for n in range(2, 5)]
+        retry = [job(1, attempt=2, start=20, end=30)] + [job(n, attempt=2) for n in range(2, 5)]
+        for entry in retry:
+            if benchmark.carried_forward(entry, first):
+                entry["carried_forward_from_attempt"] = 1
+        self.assertTrue(benchmark.accepted([first, retry], "once"))
+        self.assertEqual(benchmark.job_metrics([first, retry])["job_seconds"], 50)
+        self.assertEqual(benchmark.job_metrics([first, retry])["peak_overlapping_jobs"], 4)
+        retry[1]["started_at"] = "2026-01-01T00:00:20Z"
+        retry[1]["completed_at"] = "2026-01-01T00:00:30Z"
+        self.assertFalse(benchmark.accepted([first, retry], "once"))
 
 
 class TimingTests(unittest.TestCase):
