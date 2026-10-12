@@ -1,0 +1,54 @@
+name: Synthetic CI
+run-name: trial-${{ inputs.trial }}
+on:
+  workflow_dispatch:
+    inputs:
+      trial:
+        description: Unique trial identifier
+        required: true
+      parallel:
+        description: Maximum simultaneous jobs
+        type: choice
+        options: ['1', '4']
+        default: '1'
+      hold:
+        description: Seconds of synthetic occupancy per job (5 to 60)
+        default: '15'
+      fault:
+        description: Inject one transient failure on the first attempt
+        type: choice
+        options: [none, once]
+        default: none
+permissions:
+  contents: read
+jobs:
+  check:
+    name: synthetic (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ fromJSON(inputs.parallel) }}
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run unchanged checks
+        run: python3 -m unittest discover -s tests -v
+      - name: Hold and optionally fail
+        env:
+          HOLD_SECONDS: ${{ inputs.hold }}
+          FAULT: ${{ inputs.fault }}
+          SHARD: ${{ matrix.shard }}
+          ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import time
+          seconds = int(os.environ['HOLD_SECONDS'])
+          assert 5 <= seconds <= 60
+          time.sleep(seconds)
+          if (os.environ['FAULT'], os.environ['SHARD'], os.environ['ATTEMPT']) == ('once', '1', '1'):
+              raise SystemExit('Synthetic transient failure')
+          PY
+
